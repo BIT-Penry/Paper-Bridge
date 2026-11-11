@@ -185,6 +185,7 @@ module.exports = class PaperBridge extends Plugin {
     } finally { this.importing.delete(key); }
   }
   async addMainFigure(note,meta,interactive) {
+    const newImport=!!meta;
     const original=await this.app.vault.read(note);
     const fm=this.app.metadataCache.getFileCache(note)?.frontmatter||{};
     if(original.includes('<!-- paper-main-figure:start -->')||fm.cover){
@@ -204,7 +205,8 @@ module.exports = class PaperBridge extends Plugin {
     const response=await request(chosen.url);
     const ext=core.imageExtension(response.arrayBuffer);
     if(!ext||response.arrayBuffer.byteLength>20*1024*1024)throw new Error('图像格式暂不支持或文件超过 20 MB，未修改封面。');
-    const dir=fm['导入日期']&&note.parent.path!==core.paperFolder(this.settings.papersFolder)?note.parent.path+'/images':note.parent.path+'/'+core.safeName(note.basename,100)+'-assets/images';
+    // 新建笔记的 metadataCache 可能尚未就绪，使用导入上下文确定图片目录。
+    const dir=(newImport||fm['导入日期'])&&note.parent.path!==core.paperFolder(this.settings.papersFolder)?note.parent.path+'/images':note.parent.path+'/'+core.safeName(note.basename,100)+'-assets/images';
     await this.folder(dir);
     let path=normalizePath(dir+'/main-figure'+(chosen.number?'-fig'+core.safeName(chosen.number,10):'')+'.'+ext),index=1;
     const base=path.slice(0,-ext.length-1);
