@@ -1,0 +1,23 @@
+{
+  "name": "obsidian-paper-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Import papers, PDFs, bilingual abstracts and reading notes into Obsidian.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "check": "node --check src/core.js && node --check src/main.js && node --check main.js",
+    "test": "npm run build && node tests/core.cjs && node tests/reading.cjs && node tests/settings.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BIT-Penry/Paper-Bridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BIT-Penry/Paper-Bridge/issues"
+  },
+  "homepage": "https://github.com/BIT-Penry/Paper-Bridge#readme"
+}

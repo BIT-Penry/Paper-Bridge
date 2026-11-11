@@ -1,0 +1,77 @@
+# Paper Bridge
+
+将论文链接连接到 Obsidian 阅读笔记。当前为 **0.1.0 开发预览版**，尚未发布正式 Release 或进入 Obsidian 社区目录。
+
+[源码仓库](https://github.com/BIT-Penry/Paper-Bridge) · [问题反馈](https://github.com/BIT-Penry/Paper-Bridge/issues)
+
+支持 arXiv、IEEE Xplore 和 DOI；自动获取元数据、尝试下载可访问的 PDF、建立粗读或精读笔记，并尝试提取方法主图。中文摘要翻译可选，默认关闭。
+
+## 安装开发版
+
+需要桌面版 Obsidian 1.15.0 或以上。先在一个测试仓库中使用。
+
+1. 在该项目目录执行 `npm run build`。
+2. 在测试仓库中创建 `.obsidian/plugins/paper-bridge/`。
+3. 将项目根目录的 `main.js`、`manifest.json`、`styles.css` 复制进去。
+4. 重启 Obsidian，在第三方插件中启用 Paper Bridge。
+5. 在插件设置中选择论文保存目录、默认阅读深度。无需 Copilot、Dataview 或现有工作台。
+
+原个人仓库中的“论文导入”插件仍独立保留，本项目不会自动替换它。
+
+## 使用
+
+通过命令面板的“导入论文：arXiv／IEEE／DOI”，或侧边栏下载按钮导入。
+
+```text
+论文笔记/
+└── 2025-Paper title/
+    ├── Paper title.md
+    ├── paper.pdf
+    └── images/
+        └── main-figure-fig1.png
+```
+
+目录按 `年份-题目` 命名。标签留空，由使用者填写。DOI 和 arXiv 编号用于查重，重复导入打开原笔记；同名但未确认是同一论文的目录不会合并或覆盖。
+
+正文顺序为中文摘要、原文摘要、主图、阅读笔记。粗读包含：研究问题与贡献、方法与关键假设、实验证据与局限、关键公式解读、相关笔记。精读增加速览、方法拆解、训练部署、研究关联和复现记录。修改阅读深度属性不会重写已有正文。
+
+## 摘要翻译
+
+在设置中启用自动翻译，填写 OpenAI 兼容服务的 Base URL、模型名称，并保存 API Key。
+
+- Base URL 示例：`https://api.example.com/v1`；不要填写完整的 `/chat/completions` 地址。
+- 仅摘要会发送到你指定的服务，不发送 PDF、图片或整篇笔记。
+- API Key 保存到本设备的 Obsidian 钥匙串，不写入 `data.json`、源码或日志；不同设备需分别配置。
+- 不绑定特定服务商，不读取其他插件的配置或密钥。远程服务必须使用 HTTPS，本机服务可用 HTTP。
+- 翻译可能产生费用。译文标注机器翻译，原文和来源保留。失败不会阻止论文笔记创建。
+- 已有论文可执行“为当前论文补充中文摘要”；已有非空译文不会覆盖。
+
+## PDF 与主图
+
+优先使用原始来源提供的全文地址，并尝试核对标题与作者后匹配 arXiv 预印本；必要时查询 Semantic Scholar 开放全文地址。PDF 可能是预印本，版本和来源会写入属性。插件不读取浏览器登录凭据，也不绕过出版社访问权限。
+
+主图根据 HTML 图注中 framework、architecture、schematic overview 等线索选择，不固定选第一张。下载到 `images/`，正文和 `cover` 共用该图。透明主图使用白底显示样式，原图保留。判断不唯一时，可执行“为当前论文拉取／选择方法主图”并按图注选择。
+
+仅有 PDF、组合子图、SVG-only 图示、站点限流或页面结构变化时，可能无法自动获取主图。目前不从 PDF 自动裁图。支持 PNG、JPEG、GIF、WebP；主图上限 20 MB，PDF 上限 80 MB。
+
+也提供“为当前论文重试下载 PDF／补全摘要”和“为当前论文补入本地 PDF”命令。
+
+## 开发
+
+需要 Node.js 18+，当前构建和测试无第三方依赖，不需要 `npm install`。
+
+```sh
+npm run build
+npm run check
+npm test
+```
+
+- `src/core.js`：元数据解析、模板、查重和图示候选规则。
+- `src/main.js`：Obsidian 入口、保存、网络请求和设置。
+- `scripts/build.cjs`：生成自包含 `main.js`。
+- `tests/`：离线回归测试；不调用付费 API。
+- `docs/release-checklist.md`：后续公开发布前的核对项。
+
+源码已从个人仓库插件迁出。当前测试覆盖模拟 API 和文件保存路径；独立设置界面的真实 Obsidian 验证仍待进行，未宣称已通过社区审核。
+
+MIT License。论文 PDF、图片及摘要的权利归各自权利人，不包含在本仓库中。

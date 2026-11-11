@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict');
+const c=require('../src/core');
+for(const value of ['1706.03762','arXiv:1706.03762v2','https://arxiv.org/abs/1706.03762','https://arxiv.org/pdf/1706.03762.pdf','https://doi.org/10.48550/arXiv.1706.03762'])assert.equal(c.parseInput(value).kind,'arxiv');
+assert.equal(c.parseInput('https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=12345').id,'12345');
+assert.equal(c.parseInput('10.1109/example.1234').kind,'doi');
+for(const bad of ['javascript:alert(1)','https://arxiv.org.evil.example/abs/1706.03762','https://example.org'])assert.throws(()=>c.parseInput(bad));
+assert(c.samePaper({arXiv:'1706.03762'},c.parseInput('1706.03762v2')));
+assert(c.samePaper({DOI:'https://doi.org/10.1109/example.1234'},c.parseInput('10.1109/EXAMPLE.1234')));
+for(const bad of ['../outside','/absolute','C:\\outside','.obsidian','notes/../../outside','notes//bad'])assert.throws(()=>c.paperFolder(bad));
+assert.equal(c.paperFolder('Research/Papers/'),'Research/Papers');
+assert.equal(c.translationEndpoint('https://api.example.com/v1/'),'https://api.example.com/v1/chat/completions');
+assert.equal(c.translationEndpoint('http://localhost:1234/v1'),'http://localhost:1234/v1/chat/completions');
+for(const bad of ['http://api.example.com/v1','https://user:pass@example.org/v1','https://api.example.com/v1?api_key=fake','javascript:alert(1)',''])assert.throws(()=>c.translationEndpoint(bad));
+const pdf=new TextEncoder().encode('%PDF-1.7\nexample');assert(c.isPdf(pdf.buffer));assert(!c.isPdf(new TextEncoder().encode('<html>login</html>').buffer));
+assert.equal(c.imageExtension(new Uint8Array([137,80,78,71,13,10,26,10]).buffer),'png');assert.equal(c.imageExtension(new TextEncoder().encode('<html>').buffer),null);
+assert.equal(c.automaticFigure([{score:7},{score:7}]),null);
+console.log('PASS: identifiers, duplicate detection, folder validation, secure endpoint validation, file signatures and ambiguous figures.');
