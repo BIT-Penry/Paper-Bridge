@@ -38,13 +38,21 @@ class Plugin {
   addRibbonIcon(){}
 }
 const oldLoad=Module._load;
-Module._load=function(name,...args){if(name==='obsidian')return {Plugin,PluginSettingTab:class{constructor(app){this.app=app;this.containerEl=new Element();}},Setting,addIcon:()=>{},setIcon:()=>{},requestUrl:async opts=>{if(opts.url.endsWith('/models'))return {status:200,json:{data:[{id:'z-model'},{id:'a-model'},{id:'a-model'}]}};assert.equal(opts.url,'https://school.example/v1/chat/completions');assert.equal(JSON.parse(opts.body).model,'example-model');return {status:200,json:{choices:[{message:{content:'连接测试'}}]}};},Modal,Notice:class{},normalizePath:p=>p};return oldLoad.call(this,name,...args);};
+Module._load=function(name,...args){if(name==='obsidian')return {Plugin,FuzzySuggestModal:class{setPlaceholder(){}open(){opened=this;}},PluginSettingTab:class{constructor(app){this.app=app;this.containerEl=new Element();}},Setting,addIcon:()=>{},setIcon:()=>{},requestUrl:async opts=>{if(opts.url.endsWith('/models'))return {status:200,json:{data:[{id:'z-model'},{id:'a-model'},{id:'a-model'}]}};assert.equal(opts.url,'https://school.example/v1/chat/completions');assert.equal(JSON.parse(opts.body).model,'example-model');return {status:200,json:{choices:[{message:{content:'连接测试'}}]}};},Modal,Notice:class{},normalizePath:p=>p};return oldLoad.call(this,name,...args);};
 const PaperBridge=require('../main');Module._load=oldLoad;
 (async()=>{
   const plugin=new PaperBridge();plugin.app={secretStorage:{getSecret:key=>secrets.get(key),setSecret:(key,value)=>secrets.set(key,value)}};
   await plugin.onload();assert.equal(plugin.settings.translationEnabled,false);assert.equal(plugin.settings.papersFolder,'Research/Papers');assert(!('unexpectedPrivateField' in plugin.settings));
   plugin.tab.display();
   const row=name=>rows.findLast(r=>r.name===name);
+  const file={path:'模板/复现.md'};plugin.app.vault={getMarkdownFiles:()=>[file],read:async()=>'## 复现步骤'};
+  await row('自定义阅读模板').controls[0].click();assert.deepEqual(opened.getItems(),[file]);
+  await opened.onChooseItem(file);assert.deepEqual(persisted.templatePaths,[file.path]);
+  await row('默认阅读模板').controls[0].change(file.path);
+  stored=persisted;const reopened=new PaperBridge();reopened.app=plugin.app;await reopened.onload();
+  assert.equal(reopened.settings.defaultDepth,file.path);assert.deepEqual(reopened.settings.templatePaths,[file.path]);
+  await row('自定义阅读模板').controls[0].click();assert.deepEqual(opened.getItems(),[]);
+  await row('复现').controls[0].click();assert.deepEqual(persisted.templatePaths,[]);assert.equal(persisted.defaultDepth,'粗读');
   await row('模型').controls[0].change('example-model');assert.equal(persisted.providers[0].model,'example-model');assert(!JSON.stringify(persisted).includes('do-not-persist'));
   const providerFields=row('模型').parent;assert(!providerFields.hidden);await row('自动翻译摘要').controls[0].change(true);assert(!providerFields.hidden);await row('自动翻译摘要').controls[0].change(false);assert(!providerFields.hidden);
   const keyRow=row('API Key');assert.equal(keyRow.controls[0].inputEl.type,'password');

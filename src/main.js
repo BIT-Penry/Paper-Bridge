@@ -1,5 +1,5 @@
 'use strict';
-const { Plugin, Modal, Notice, setIcon, requestUrl, normalizePath, PluginSettingTab, Setting } = require('obsidian');
+const { Plugin, Modal, FuzzySuggestModal, Notice, setIcon, requestUrl, normalizePath, PluginSettingTab, Setting } = require('obsidian');
 const core = require('./core');
 const DEFAULT_SETTINGS={papersFolder:'论文笔记',defaultDepth:'粗读',translationEnabled:false,translationBaseUrl:'',translationModel:''};
 const SECRET_NAME='paper-bridge-api-key';
@@ -88,6 +88,10 @@ async function request(url, timeoutMs = 30000) {
   return response;
 }
 const parseDocument = (text, type) => new DOMParser().parseFromString(text, type);
+function templateChoices(paths) {
+  return [['粗读','粗读','问题、贡献与关键公式'],['精读','精读','方法拆解、实验与复现'],
+    ...paths.map(path=>[path,path.split('/').pop().slice(0,-3),path])];
+}
 class ImportModal extends Modal {
   constructor(plugin) { super(plugin.app); this.plugin = plugin; this.localFile = null; this.busy = false; }
   onOpen() {
@@ -103,17 +107,17 @@ class ImportModal extends Modal {
       return row.createEl('input',{type:'text',attr:{id:'pb-import-'+name,placeholder,spellcheck:'false'}});
     };
     this.source=field(this.contentEl,'source','论文链接或 DOI','粘贴 arXiv 编号、IEEE 链接或 DOI');
-    this.readingDepth=this.plugin.settings.defaultDepth==='精读'?'精读':'粗读';
+    this.readingDepth=this.plugin.settings.defaultDepth;
     this.depthGroup=this.contentEl.createEl('fieldset',{cls:'pb-depth-group'});
-    this.depthGroup.createEl('legend',{text:'阅读深度'});
+    this.depthGroup.createEl('legend',{text:'阅读模板'});
     const choices=this.depthGroup.createDiv({cls:'pb-depth-options'});
-    for(const [value,help] of [['粗读','问题、贡献与关键公式'],['精读','方法拆解、实验与复现']]){
+    for(const [value,title,help] of templateChoices(this.plugin.settings.templatePaths)){
       const label=choices.createEl('label',{cls:'pb-depth-choice'});
       const radio=label.createEl('input',{type:'radio',attr:{name:'pb-reading-depth',value}});
       radio.checked=value===this.readingDepth;
       radio.onchange=()=>{if(radio.checked)this.readingDepth=value;};
       const copy=label.createSpan();
-      copy.createEl('strong',{text:value});
+      copy.createEl('strong',{text:title});
       copy.createEl('small',{text:help});
     }
     const extra=this.contentEl.createEl('details',{cls:'pb-import-extra'});
@@ -162,7 +166,8 @@ class ImportModal extends Modal {
       let existing = this.plugin.findExisting(source);
       if (existing) { await this.plugin.open(existing);new Notice('这篇论文已存在，已打开原笔记。');this.close();return; }
       const meta = await core.fetchMetadata(source, request, parseDocument, this.doi.value.trim());
-      meta.readingDepth=this.readingDepth;
+      if(this.plugin.settings.templatePaths.includes(this.readingDepth))meta.templatePath=this.readingDepth;
+      else meta.readingDepth=this.readingDepth;
       existing = this.plugin.findExisting(source, meta);
       if (existing) { await this.plugin.open(existing);new Notice('已找到同一篇论文，未覆盖你的笔记。');this.close();return; }
       this.setStatus('已获取《' + meta.title + '》，正在获取 PDF…');
@@ -207,7 +212,8 @@ module.exports = class PaperBridge extends Plugin {
     this.settings.activeProvider=this.settings.providers.some(p=>p.id===saved.activeProvider)?saved.activeProvider:(this.settings.providers[0]?.id || '');
     delete this.settings.translationBaseUrl;
     delete this.settings.translationModel;
-    if(!['粗读','精读'].includes(this.settings.defaultDepth))this.settings.defaultDepth='粗读';
+    this.settings.templatePaths=Array.isArray(saved.templatePaths)?[...new Set(saved.templatePaths.filter(p=>typeof p==='string' && /\.md$/i.test(p)))]:[];
+    if(!['粗读','精读',...this.settings.templatePaths].includes(this.settings.defaultDepth))this.settings.defaultDepth='粗读';
     this.addSettingTab(new PaperBridgeSettings(this.app,this));
     this.importing = new Set();
     this.translating = new Set();
@@ -325,11 +331,17 @@ module.exports = class PaperBridge extends Plugin {
       const notePath = folder + '/' + core.safeName(meta.title,100) + '.md';
       // 同名不一定是同一论文；未通过标识符查重时，不能合并或覆盖目录。
       if (this.app.vault.getAbstractFileByPath(folder)) throw new Error('已有同名论文目录，请先核对或重命名原目录；没有覆盖任何文件。');
+      let templateBody;
+      if(meta.templatePath){
+        const file=this.app.vault.getAbstractFileByPath(meta.templatePath);
+        if(file?.extension?.toLowerCase()!=='md')throw new Error('找不到模板：'+meta.templatePath+'。若已改名或移动，请到设置重新添加。');
+        templateBody=core.templateMarkdown(await this.app.vault.read(file));
+      }
       await this.folder(folder);await this.folder(folder + '/images');
       const pdfPath = folder + '/paper.pdf';
       if (pdf && this.app.vault.getAbstractFileByPath(pdfPath)) throw new Error('论文文件夹已存在 paper.pdf，请先检查原文件；没有覆盖。');
       // 笔记先建立，即使 PDF 写入失败仍留下可继续补入的入口。
-      const note = await this.app.vault.create(notePath, core.buildNote(meta, null, folder, dateToday()));
+      const note = await this.app.vault.create(notePath, core.buildNote(meta, null, folder, dateToday(), templateBody));
       let pdfSaved=false;
       if (pdf) {
         try {
@@ -472,7 +484,26 @@ class PaperBridgeSettings extends PluginSettingTab {
         catch{folderError.textContent='请输入仓库内的相对路径，例如 Research/Papers，不要包含 ..。';folderError.hidden=false;text.inputEl.setAttribute('aria-invalid','true');}
       });
     });
-    new Setting(imports).setName('默认阅读深度').setDesc('仅影响新导入的笔记，导入时仍可单独选择。').addDropdown(select=>select.addOptions({'粗读':'粗读','精读':'精读'}).setValue(settings.defaultDepth).onChange(async value=>{settings.defaultDepth=value;await save();}));
+    const templates=templateChoices(settings.templatePaths);
+    new Setting(imports).setName('默认阅读模板').setDesc('导入每篇论文时仍可另选。').addDropdown(select=>select.addOptions(Object.fromEntries(templates.map(([id,title])=>[id,settings.templatePaths.includes(id)?id:title]))).setValue(settings.defaultDepth).onChange(async value=>{settings.defaultDepth=value;await save();}));
+    new Setting(imports).setName('自定义阅读模板').setDesc('选择仓库内的 Markdown 笔记，把它的正文用作阅读提纲。摘要、PDF 和主图仍由插件处理。').addButton(button=>button.setButtonText('添加模板').onClick(()=>{
+      const picker=new FuzzySuggestModal(this.app);
+      picker.setPlaceholder('搜索模板文件名或路径…');
+      picker.getItems=()=>this.app.vault.getMarkdownFiles().filter(file=>!settings.templatePaths.includes(file.path));
+      picker.getItemText=file=>file.path;
+      picker.onChooseItem=async file=>{
+        if(settings.templatePaths.includes(file.path))return;
+        try{core.templateMarkdown(await this.app.vault.read(file));}
+        catch(err){new Notice('无法添加模板：'+err.message);return;}
+        settings.templatePaths.push(file.path);await save();this.display();
+      };
+      picker.open();
+    }));
+    for(const path of settings.templatePaths)new Setting(imports).setName(path.split('/').pop().slice(0,-3)).setDesc(path).addButton(button=>button.setButtonText('移除').onClick(async()=>{
+      settings.templatePaths=settings.templatePaths.filter(p=>p!==path);
+      if(settings.defaultDepth===path)settings.defaultDepth='粗读';
+      await save();this.display();
+    }));
     containerEl.createEl('h3',{text:'摘要翻译',cls:'pb-section-title'});
     const translation=containerEl.createDiv({cls:'pb-settings-section'});
     let translationToggle;

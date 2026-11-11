@@ -248,15 +248,22 @@ function insertTranslation(text, translation, model) {
   const at=text.search(/^## 原文摘要[ \t]*$/m);
   return at>=0?text.slice(0,at)+block+text.slice(at):text+'\n'+block;
 }
-function buildNote(meta, pdf, folder, imported) {
+function templateMarkdown(text) {
+  const body=text.replace(/^\uFEFF/,'').replace(/^---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/,'').trimEnd().replace(/^(?:[ \t]*\r?\n)+/,'');
+  if(!body.trim())throw new Error('模板正文为空，请先写入标题或内容。');
+  // 摘要和主图按二级标题划分；让以列表或段落开头的模板也有明确边界。
+  return (/^## /.test(body)?body:'## 阅读笔记\n\n'+body)+'\n';
+}
+function buildNote(meta, pdf, folder, imported, templateBody) {
   const q = value => JSON.stringify(value == null ? '' : value);
   const localPdf = pdf ? folder + '/paper.pdf' : '';
-  const fm = { '类型': '论文笔记', '阅读状态': '待读', '阅读深度': meta.readingDepth==='精读'?'精读':'粗读', '标题': meta.title, '作者': meta.authors, '年份': Number(meta.published?.slice(0, 4)) || '',
+  const fm = { '类型': '论文笔记', '阅读状态': '待读', '阅读深度': templateBody?'自定义':meta.readingDepth==='精读'?'精读':'粗读', '标题': meta.title, '作者': meta.authors, '年份': Number(meta.published?.slice(0, 4)) || '',
     '发表日期': meta.published || '', 'DOI': meta.doi ? 'https://doi.org/' + canonicalDoi(meta.doi) : '', 'arXiv': meta.arxiv || '', '期刊或会议': meta.venue || '',
     '原文链接': meta.url, '摘要来源': meta.abstract ? (meta.abstractSource || meta.url) : '', '导入日期': imported, 'PDF状态': pdf ? '已下载' : '待补充', 'PDF版本': pdf?.version || '',
     'PDF来源': pdf?.url || '', '本地PDF': localPdf ? '[[' + localPdf + ']]' : '', tags: [], cover: '' };
+  if(templateBody)fm['阅读模板']=meta.templatePath;
   return '---\n' + Object.entries(fm).map(([k,v]) => k + ': ' + q(v)).join('\n') + '\n---\n\n# ' + meta.title + '\n\n' +
     (localPdf ? '[打开本地 PDF](<' + encodeURI('paper.pdf') + '>)\n\n' : '> PDF 暂未下载，可使用“论文导入：为当前论文补入本地 PDF”。\n\n') +
-    '## 中文摘要\n\n中文翻译待补充。\n\n## 原文摘要\n\n' + (meta.abstract || '来源未提供摘要，待补充。') + (meta.abstract?'\n\n摘要来源：['+(meta.abstractSource||meta.url)+']('+(meta.abstractSource||meta.url)+')':'')+'\n\n'+paperBody(meta.readingDepth);
+    '## 中文摘要\n\n中文翻译待补充。\n\n## 原文摘要\n\n' + (meta.abstract || '来源未提供摘要，待补充。') + (meta.abstract?'\n\n摘要来源：['+(meta.abstractSource||meta.url)+']('+(meta.abstractSource||meta.url)+')':'')+'\n\n'+(templateBody??paperBody(meta.readingDepth));
 }
-module.exports = { paperFolder, translationEndpoint, parseInput, canonicalArxiv, canonicalDoi, samePaper, safeName, parseArxivHtml, parseArxivAtom, fromCrossref, fetchMetadata, matchArxivEntry, enrichFromArxiv, openPdfCandidates, figureScore, parseFigureCandidates, automaticFigure, fetchFigures, imageExtension, insertMainFigure, isPdf, paperBody, originalAbstract, moveAbstractsToTop, insertTranslation, buildNote };
+module.exports = { paperFolder, translationEndpoint, parseInput, canonicalArxiv, canonicalDoi, samePaper, safeName, parseArxivHtml, parseArxivAtom, fromCrossref, fetchMetadata, matchArxivEntry, enrichFromArxiv, openPdfCandidates, figureScore, parseFigureCandidates, automaticFigure, fetchFigures, imageExtension, insertMainFigure, isPdf, paperBody, originalAbstract, moveAbstractsToTop, insertTranslation, templateMarkdown, buildNote };

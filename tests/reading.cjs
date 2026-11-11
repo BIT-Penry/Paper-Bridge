@@ -61,5 +61,18 @@ importer.app={vault:{read:async()=>contents,process:async(f,fn)=>{contents=fn(co
   const count=saved.size;
   await assert.rejects(()=>writer.savePaper(core.parseInput('10.1109/different.5678'),{...meta,title:'NavRL: Test',doi:'10.1109/different.5678'},null,null),/同名论文目录/);
   assert.equal(saved.size,count);
+  const templatePath='模板/复现.md',template={extension:'md',path:templatePath,text:'---\r\ntags: private\r\n---\r\n- [ ] 运行基线'};
+  const withTemplate=(title)=>writer.savePaper(source,{...meta,title,templatePath},null,null);
+  await assert.rejects(()=>withTemplate('Missing'),/找不到模板/);assert.equal(saved.size,count);
+  saved.set(templatePath,template);writer.app.vault.read=async f=>f.text;
+  const first=(await withTemplate('Paper A')).note.text;
+  assert(first.includes('阅读模板: "模板/复现.md"'));assert(!first.includes('private'));assert(!first.includes('## 研究问题与贡献'));
+  assert.equal(core.originalAbstract(first),meta.abstract);
+  const withFigure=core.insertMainFigure(first,'images/fig.png',{caption:'Framework',pageUrl:'https://example.org'});
+  assert(withFigure.indexOf('![[images/fig.png]]')<withFigure.indexOf('## 阅读笔记'));
+  template.text='## 新问题\n\n结果能复现吗？';assert((await withTemplate('Paper B')).note.text.endsWith(template.text+'\n'));assert(first.includes('- [ ] 运行基线'));
+  template.text='---\ntags: [模板]\n---\n';const beforeEmpty=saved.size;
+  await assert.rejects(()=>withTemplate('Empty'),/模板正文为空/);assert.equal(saved.size,beforeEmpty);
+  console.log('PASS: custom template imports use latest Markdown, keep managed sections separate and leave no files for missing or empty templates.');
   console.log('PASS: year-title folder naming and collision protection, coarse/fine templates, abstract extraction and translation, preserve annotations and tags, repeat skip, abstract-only request, keychain and HTTP failure.');
 })().catch(err=>{console.error(err);process.exitCode=1;});

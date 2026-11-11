@@ -1,5 +1,5 @@
 'use strict';
-const { Plugin, Modal, Notice, setIcon, requestUrl, normalizePath, PluginSettingTab, Setting } = require('obsidian');
+const { Plugin, Modal, FuzzySuggestModal, Notice, setIcon, requestUrl, normalizePath, PluginSettingTab, Setting } = require('obsidian');
 const core = (() => { const module = { exports: {} };
 'use strict';
 const compact = value => String(value || '').replace(/\s+/g, ' ').trim();
@@ -251,18 +251,25 @@ function insertTranslation(text, translation, model) {
   const at=text.search(/^## 原文摘要[ \t]*$/m);
   return at>=0?text.slice(0,at)+block+text.slice(at):text+'\n'+block;
 }
-function buildNote(meta, pdf, folder, imported) {
+function templateMarkdown(text) {
+  const body=text.replace(/^\uFEFF/,'').replace(/^---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/,'').trimEnd().replace(/^(?:[ \t]*\r?\n)+/,'');
+  if(!body.trim())throw new Error('模板正文为空，请先写入标题或内容。');
+  // 摘要和主图按二级标题划分；让以列表或段落开头的模板也有明确边界。
+  return (/^## /.test(body)?body:'## 阅读笔记\n\n'+body)+'\n';
+}
+function buildNote(meta, pdf, folder, imported, templateBody) {
   const q = value => JSON.stringify(value == null ? '' : value);
   const localPdf = pdf ? folder + '/paper.pdf' : '';
-  const fm = { '类型': '论文笔记', '阅读状态': '待读', '阅读深度': meta.readingDepth==='精读'?'精读':'粗读', '标题': meta.title, '作者': meta.authors, '年份': Number(meta.published?.slice(0, 4)) || '',
+  const fm = { '类型': '论文笔记', '阅读状态': '待读', '阅读深度': templateBody?'自定义':meta.readingDepth==='精读'?'精读':'粗读', '标题': meta.title, '作者': meta.authors, '年份': Number(meta.published?.slice(0, 4)) || '',
     '发表日期': meta.published || '', 'DOI': meta.doi ? 'https://doi.org/' + canonicalDoi(meta.doi) : '', 'arXiv': meta.arxiv || '', '期刊或会议': meta.venue || '',
     '原文链接': meta.url, '摘要来源': meta.abstract ? (meta.abstractSource || meta.url) : '', '导入日期': imported, 'PDF状态': pdf ? '已下载' : '待补充', 'PDF版本': pdf?.version || '',
     'PDF来源': pdf?.url || '', '本地PDF': localPdf ? '[[' + localPdf + ']]' : '', tags: [], cover: '' };
+  if(templateBody)fm['阅读模板']=meta.templatePath;
   return '---\n' + Object.entries(fm).map(([k,v]) => k + ': ' + q(v)).join('\n') + '\n---\n\n# ' + meta.title + '\n\n' +
     (localPdf ? '[打开本地 PDF](<' + encodeURI('paper.pdf') + '>)\n\n' : '> PDF 暂未下载，可使用“论文导入：为当前论文补入本地 PDF”。\n\n') +
-    '## 中文摘要\n\n中文翻译待补充。\n\n## 原文摘要\n\n' + (meta.abstract || '来源未提供摘要，待补充。') + (meta.abstract?'\n\n摘要来源：['+(meta.abstractSource||meta.url)+']('+(meta.abstractSource||meta.url)+')':'')+'\n\n'+paperBody(meta.readingDepth);
+    '## 中文摘要\n\n中文翻译待补充。\n\n## 原文摘要\n\n' + (meta.abstract || '来源未提供摘要，待补充。') + (meta.abstract?'\n\n摘要来源：['+(meta.abstractSource||meta.url)+']('+(meta.abstractSource||meta.url)+')':'')+'\n\n'+(templateBody??paperBody(meta.readingDepth));
 }
-module.exports = { paperFolder, translationEndpoint, parseInput, canonicalArxiv, canonicalDoi, samePaper, safeName, parseArxivHtml, parseArxivAtom, fromCrossref, fetchMetadata, matchArxivEntry, enrichFromArxiv, openPdfCandidates, figureScore, parseFigureCandidates, automaticFigure, fetchFigures, imageExtension, insertMainFigure, isPdf, paperBody, originalAbstract, moveAbstractsToTop, insertTranslation, buildNote };
+module.exports = { paperFolder, translationEndpoint, parseInput, canonicalArxiv, canonicalDoi, samePaper, safeName, parseArxivHtml, parseArxivAtom, fromCrossref, fetchMetadata, matchArxivEntry, enrichFromArxiv, openPdfCandidates, figureScore, parseFigureCandidates, automaticFigure, fetchFigures, imageExtension, insertMainFigure, isPdf, paperBody, originalAbstract, moveAbstractsToTop, insertTranslation, templateMarkdown, buildNote };
 
 return module.exports; })();
 const DEFAULT_SETTINGS={papersFolder:'论文笔记',defaultDepth:'粗读',translationEnabled:false,translationBaseUrl:'',translationModel:''};
@@ -352,6 +359,10 @@ async function request(url, timeoutMs = 30000) {
   return response;
 }
 const parseDocument = (text, type) => new DOMParser().parseFromString(text, type);
+function templateChoices(paths) {
+  return [['粗读','粗读','问题、贡献与关键公式'],['精读','精读','方法拆解、实验与复现'],
+    ...paths.map(path=>[path,path.split('/').pop().slice(0,-3),path])];
+}
 class ImportModal extends Modal {
   constructor(plugin) { super(plugin.app); this.plugin = plugin; this.localFile = null; this.busy = false; }
   onOpen() {
@@ -367,17 +378,17 @@ class ImportModal extends Modal {
       return row.createEl('input',{type:'text',attr:{id:'pb-import-'+name,placeholder,spellcheck:'false'}});
     };
     this.source=field(this.contentEl,'source','论文链接或 DOI','粘贴 arXiv 编号、IEEE 链接或 DOI');
-    this.readingDepth=this.plugin.settings.defaultDepth==='精读'?'精读':'粗读';
+    this.readingDepth=this.plugin.settings.defaultDepth;
     this.depthGroup=this.contentEl.createEl('fieldset',{cls:'pb-depth-group'});
-    this.depthGroup.createEl('legend',{text:'阅读深度'});
+    this.depthGroup.createEl('legend',{text:'阅读模板'});
     const choices=this.depthGroup.createDiv({cls:'pb-depth-options'});
-    for(const [value,help] of [['粗读','问题、贡献与关键公式'],['精读','方法拆解、实验与复现']]){
+    for(const [value,title,help] of templateChoices(this.plugin.settings.templatePaths)){
       const label=choices.createEl('label',{cls:'pb-depth-choice'});
       const radio=label.createEl('input',{type:'radio',attr:{name:'pb-reading-depth',value}});
       radio.checked=value===this.readingDepth;
       radio.onchange=()=>{if(radio.checked)this.readingDepth=value;};
       const copy=label.createSpan();
-      copy.createEl('strong',{text:value});
+      copy.createEl('strong',{text:title});
       copy.createEl('small',{text:help});
     }
     const extra=this.contentEl.createEl('details',{cls:'pb-import-extra'});
@@ -426,7 +437,8 @@ class ImportModal extends Modal {
       let existing = this.plugin.findExisting(source);
       if (existing) { await this.plugin.open(existing);new Notice('这篇论文已存在，已打开原笔记。');this.close();return; }
       const meta = await core.fetchMetadata(source, request, parseDocument, this.doi.value.trim());
-      meta.readingDepth=this.readingDepth;
+      if(this.plugin.settings.templatePaths.includes(this.readingDepth))meta.templatePath=this.readingDepth;
+      else meta.readingDepth=this.readingDepth;
       existing = this.plugin.findExisting(source, meta);
       if (existing) { await this.plugin.open(existing);new Notice('已找到同一篇论文，未覆盖你的笔记。');this.close();return; }
       this.setStatus('已获取《' + meta.title + '》，正在获取 PDF…');
@@ -471,7 +483,8 @@ module.exports = class PaperBridge extends Plugin {
     this.settings.activeProvider=this.settings.providers.some(p=>p.id===saved.activeProvider)?saved.activeProvider:(this.settings.providers[0]?.id || '');
     delete this.settings.translationBaseUrl;
     delete this.settings.translationModel;
-    if(!['粗读','精读'].includes(this.settings.defaultDepth))this.settings.defaultDepth='粗读';
+    this.settings.templatePaths=Array.isArray(saved.templatePaths)?[...new Set(saved.templatePaths.filter(p=>typeof p==='string' && /\.md$/i.test(p)))]:[];
+    if(!['粗读','精读',...this.settings.templatePaths].includes(this.settings.defaultDepth))this.settings.defaultDepth='粗读';
     this.addSettingTab(new PaperBridgeSettings(this.app,this));
     this.importing = new Set();
     this.translating = new Set();
@@ -589,11 +602,17 @@ module.exports = class PaperBridge extends Plugin {
       const notePath = folder + '/' + core.safeName(meta.title,100) + '.md';
       // 同名不一定是同一论文；未通过标识符查重时，不能合并或覆盖目录。
       if (this.app.vault.getAbstractFileByPath(folder)) throw new Error('已有同名论文目录，请先核对或重命名原目录；没有覆盖任何文件。');
+      let templateBody;
+      if(meta.templatePath){
+        const file=this.app.vault.getAbstractFileByPath(meta.templatePath);
+        if(file?.extension?.toLowerCase()!=='md')throw new Error('找不到模板：'+meta.templatePath+'。若已改名或移动，请到设置重新添加。');
+        templateBody=core.templateMarkdown(await this.app.vault.read(file));
+      }
       await this.folder(folder);await this.folder(folder + '/images');
       const pdfPath = folder + '/paper.pdf';
       if (pdf && this.app.vault.getAbstractFileByPath(pdfPath)) throw new Error('论文文件夹已存在 paper.pdf，请先检查原文件；没有覆盖。');
       // 笔记先建立，即使 PDF 写入失败仍留下可继续补入的入口。
-      const note = await this.app.vault.create(notePath, core.buildNote(meta, null, folder, dateToday()));
+      const note = await this.app.vault.create(notePath, core.buildNote(meta, null, folder, dateToday(), templateBody));
       let pdfSaved=false;
       if (pdf) {
         try {
@@ -736,7 +755,26 @@ class PaperBridgeSettings extends PluginSettingTab {
         catch{folderError.textContent='请输入仓库内的相对路径，例如 Research/Papers，不要包含 ..。';folderError.hidden=false;text.inputEl.setAttribute('aria-invalid','true');}
       });
     });
-    new Setting(imports).setName('默认阅读深度').setDesc('仅影响新导入的笔记，导入时仍可单独选择。').addDropdown(select=>select.addOptions({'粗读':'粗读','精读':'精读'}).setValue(settings.defaultDepth).onChange(async value=>{settings.defaultDepth=value;await save();}));
+    const templates=templateChoices(settings.templatePaths);
+    new Setting(imports).setName('默认阅读模板').setDesc('导入每篇论文时仍可另选。').addDropdown(select=>select.addOptions(Object.fromEntries(templates.map(([id,title])=>[id,settings.templatePaths.includes(id)?id:title]))).setValue(settings.defaultDepth).onChange(async value=>{settings.defaultDepth=value;await save();}));
+    new Setting(imports).setName('自定义阅读模板').setDesc('选择仓库内的 Markdown 笔记，把它的正文用作阅读提纲。摘要、PDF 和主图仍由插件处理。').addButton(button=>button.setButtonText('添加模板').onClick(()=>{
+      const picker=new FuzzySuggestModal(this.app);
+      picker.setPlaceholder('搜索模板文件名或路径…');
+      picker.getItems=()=>this.app.vault.getMarkdownFiles().filter(file=>!settings.templatePaths.includes(file.path));
+      picker.getItemText=file=>file.path;
+      picker.onChooseItem=async file=>{
+        if(settings.templatePaths.includes(file.path))return;
+        try{core.templateMarkdown(await this.app.vault.read(file));}
+        catch(err){new Notice('无法添加模板：'+err.message);return;}
+        settings.templatePaths.push(file.path);await save();this.display();
+      };
+      picker.open();
+    }));
+    for(const path of settings.templatePaths)new Setting(imports).setName(path.split('/').pop().slice(0,-3)).setDesc(path).addButton(button=>button.setButtonText('移除').onClick(async()=>{
+      settings.templatePaths=settings.templatePaths.filter(p=>p!==path);
+      if(settings.defaultDepth===path)settings.defaultDepth='粗读';
+      await save();this.display();
+    }));
     containerEl.createEl('h3',{text:'摘要翻译',cls:'pb-section-title'});
     const translation=containerEl.createDiv({cls:'pb-settings-section'});
     let translationToggle;
