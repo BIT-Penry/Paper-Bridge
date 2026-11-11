@@ -42,7 +42,7 @@ Module._load=function(name,...args){if(name==='obsidian')return{Plugin:class{},P
   return {status,json:{choices:[{message:{content:'中文摘要。'}}]}};
 }};return originalLoad.call(this,name,...args);};
 const Importer=require('../main');Module._load=originalLoad;
-const importer=new Importer();importer.settings={papersFolder:'论文笔记',translationEnabled:true,translationBaseUrl:'https://api.example.com/v1',translationModel:'example-model'};importer.translating=new Set();let contents=note;
+const importer=new Importer();importer.settings={papersFolder:'论文笔记',translationEnabled:true,activeProvider:'custom',providers:[{id:'custom',baseUrl:'https://api.example.com/v1',keyUrl:'https://api.example.com/v1',model:'example-model'}]};importer.translating=new Set();let contents=note;
 const file={path:'Test.md'};
 importer.app={vault:{read:async()=>contents,process:async(f,fn)=>{contents=fn(contents);}},secretStorage:{getSecret:id=>{assert.equal(id,'paper-bridge-api-key');return 'fake-test-key';}}};
 (async()=>{

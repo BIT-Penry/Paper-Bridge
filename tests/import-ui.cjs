@@ -4,7 +4,7 @@ let modal;
 const previous=Module._load;
 Module._load=function(name,...args){if(name==='obsidian')return{
   Plugin:class{async loadData(){return null;}addSettingTab(){}addCommand(){}addRibbonIcon(_,__,callback){this.openImport=callback;}},
-  PluginSettingTab:class{},Setting:class{},Notice:class{},normalizePath:p=>p,
+  addIcon:()=>{},setIcon:()=>{},PluginSettingTab:class{},Setting:class{},Notice:class{},normalizePath:p=>p,
   Modal:class{constructor(app){this.app=app;this.contentEl=new Element();this.modalEl=new Element();modal=this;}open(){this.onOpen();}close(){this.closed=true;}}
 };return previous.call(this,name,...args);};
 const PaperBridge=require('../main');Module._load=previous;
