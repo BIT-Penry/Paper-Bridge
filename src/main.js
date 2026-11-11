@@ -4,11 +4,11 @@ const core = require('./core');
 const DEFAULT_SETTINGS={papersFolder:'论文笔记',defaultDepth:'粗读',translationEnabled:false,translationBaseUrl:'',translationModel:''};
 const SECRET_NAME='paper-bridge-api-key';
 const dateToday = () => { const d = new Date(); return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'); };
-async function request(url) {
+async function request(url, timeoutMs = 30000) {
   const parsed = new URL(url);
   if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('不支持的下载地址。');
   let timer;
-  const response = await Promise.race([requestUrl({ url, throw: false }), new Promise((_, reject) => { timer=setTimeout(()=>reject(new Error('网络请求超过 30 秒，请检查网络后重试。')),30000); })]).finally(()=>clearTimeout(timer));
+  const response = await Promise.race([requestUrl({ url, throw: false }), new Promise((_, reject) => { timer=setTimeout(()=>reject(new Error('网络请求超过 '+Math.round(timeoutMs/1000)+' 秒，请检查网络后重试。')),timeoutMs); })]).finally(()=>clearTimeout(timer));
   if (response.status < 200 || response.status >= 300) throw new Error('来源返回 HTTP ' + response.status);
   return response;
 }
@@ -99,7 +99,7 @@ class ImportModal extends Modal {
         if (this.pdfUrl.value.trim()) candidates.unshift({ url: this.pdfUrl.value.trim(), version: '用户提供的 PDF（版本待核对）' });
         for (const candidate of candidates) {
           try {
-            const response = await request(candidate.url);
+            const response = await request(candidate.url,120000);
             if (core.isPdf(response.arrayBuffer) && response.arrayBuffer.byteLength <= 80 * 1024 * 1024) {
               pdfData = response.arrayBuffer;pdf = candidate;break;
             }
@@ -284,7 +284,7 @@ module.exports = class PaperBridge extends Plugin {
       const candidates=await core.openPdfCandidates(meta,request,parseDocument);
       let pdf=null,data=null;const failures=[];
       for(const candidate of candidates){
-        try{const response=await request(candidate.url);if(!core.isPdf(response.arrayBuffer))throw new Error('返回内容不是 PDF');if(response.arrayBuffer.byteLength>80*1024*1024)throw new Error('PDF 超过 80 MB');pdf=candidate;data=response.arrayBuffer;break;}
+        try{const response=await request(candidate.url,120000);if(!core.isPdf(response.arrayBuffer))throw new Error('返回内容不是 PDF');if(response.arrayBuffer.byteLength>80*1024*1024)throw new Error('PDF 超过 80 MB');pdf=candidate;data=response.arrayBuffer;break;}
         catch(err){failures.push(new URL(candidate.url).hostname+'：'+err.message);}
       }
       if(!pdf)throw new Error('尚未获取全文。'+failures.join('；'));
