@@ -10,7 +10,7 @@
   "scripts": {
     "build": "node scripts/build.cjs",
     "check": "node --check src/core.js && node --check src/main.js && node --check main.js",
-    "test": "npm run build && node tests/core.cjs && node tests/reading.cjs && node tests/settings.cjs && node tests/figure-import.cjs"
+    "test": "npm run build && node tests/core.cjs && node tests/reading.cjs && node tests/settings.cjs && node tests/figure-import.cjs && node tests/import-ui.cjs"
   },
   "repository": {
     "type": "git",

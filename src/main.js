@@ -16,41 +16,78 @@ const parseDocument = (text, type) => new DOMParser().parseFromString(text, type
 class ImportModal extends Modal {
   constructor(plugin) { super(plugin.app); this.plugin = plugin; this.localFile = null; this.busy = false; }
   onOpen() {
-    this.contentEl.createEl('h2', { text: '导入论文' });
-    this.contentEl.createEl('p', { text: '粘贴 arXiv／IEEE Xplore 链接或 DOI。每篇建立独立文件夹，标签由你填写。' });
-    const field = (label, placeholder) => {
-      const row = this.contentEl.createDiv({ cls: 'rpi-field' });row.createEl('label', { text: label });
-      return row.createEl('input', { type: 'text', attr: { placeholder } });
+    this.modalEl.addClass('pb-import-modal');
+    this.contentEl.addClass('pb-import');
+    const header=this.contentEl.createDiv({cls:'pb-import-header'});
+    header.createEl('h2',{text:'导入论文'});
+    header.createEl('p',{text:'粘贴论文链接或 DOI，创建带原文摘要、PDF 和方法主图的阅读笔记。',cls:'pb-description'});
+    const field=(parent,name,label,placeholder)=>{
+      const row=parent.createDiv({cls:'pb-field'});
+      row.createEl('label',{text:label,attr:{for:'pb-import-'+name}});
+      return row.createEl('input',{type:'text',attr:{id:'pb-import-'+name,placeholder,spellcheck:'false'}});
     };
-    this.source = field('论文链接或 DOI', 'https://arxiv.org/abs/… 或 10.1109/…');
-    this.doi = field('补充 DOI（可选）', 'IEEE 页面无法读取时填写');
-    this.pdfUrl = field('PDF 直链（可选）', '你已有的公开 PDF 地址');
-    const depthRow=this.contentEl.createDiv({cls:'rpi-field'});depthRow.createEl('label',{text:'阅读深度'});
-    this.depth=depthRow.createEl('select');
+    this.source=field(this.contentEl,'source','论文链接或 DOI','arXiv、IEEE Xplore 链接，或 10.1109/…');
+    this.source.setAttr('aria-describedby','pb-source-help');
+    this.contentEl.createEl('p',{text:'支持 arXiv 编号、论文链接及 DOI。',cls:'pb-field-help',attr:{id:'pb-source-help'}});
+    const options=this.contentEl.createDiv({cls:'pb-reading-row'});
+    const depthRow=options.createDiv({cls:'pb-field'});
+    depthRow.createEl('label',{text:'阅读深度',attr:{for:'pb-import-depth'}});
+    this.depth=depthRow.createEl('select',{attr:{id:'pb-import-depth','aria-describedby':'pb-depth-help'}});
     ['粗读','精读'].forEach(value=>this.depth.createEl('option',{text:value,value}));
     this.depth.value=this.plugin.settings.defaultDepth;
-    const localRow = this.contentEl.createDiv({ cls: 'rpi-field' });localRow.createEl('label',{text:'本地 PDF（可选）'});
-    const picker = localRow.createEl('input', { type: 'file', attr: { accept: '.pdf,application/pdf' } });
-    picker.onchange = () => { this.localFile = picker.files?.[0] || null; };
-    this.feedback = this.contentEl.createEl('p', { attr: { role: 'status', 'aria-live': 'polite' } });
-    this.submit = this.contentEl.createEl('button', { text: '导入论文', cls: 'mod-cta' });
-    this.submit.onclick = () => this.run();
+    const depthHelp=options.createEl('p',{cls:'pb-field-help',attr:{id:'pb-depth-help'}});
+    const describeDepth=()=>{depthHelp.textContent=this.depth.value==='精读'?'精读包含方法拆解、训练部署和复现记录。':'粗读保留问题、方法、证据、公式和相关笔记五节。';};
+    this.depth.onchange=describeDepth;describeDepth();
+    const context=this.contentEl.createDiv({cls:'pb-import-context'});
+    context.createEl('span',{text:'保存到'});
+    context.createEl('span',{text:this.plugin.settings.papersFolder,cls:'pb-destination'});
+    context.createEl('span',{text:this.plugin.settings.translationEnabled?'自动翻译中文摘要':'中文摘要翻译已关闭',cls:'pb-translation-state'});
+    const extra=this.contentEl.createEl('details',{cls:'pb-import-extra'});
+    extra.createEl('summary',{text:'补充来源与本地 PDF'});
+    const extraFields=extra.createDiv({cls:'pb-extra-fields'});
+    extraFields.createEl('p',{text:'通常无需填写。来源访问受限，或已有全文时再补充。',cls:'pb-description'});
+    this.doi=field(extraFields,'doi','补充 DOI','IEEE 页面无法读取时填写');
+    this.pdfUrl=field(extraFields,'pdf','PDF 直链','可公开访问的 PDF 地址');
+    const localRow=extraFields.createDiv({cls:'pb-field'});
+    localRow.createEl('label',{text:'本地 PDF',attr:{for:'pb-import-file'}});
+    this.picker=localRow.createEl('input',{type:'file',attr:{id:'pb-import-file',accept:'.pdf,application/pdf'}});
+    this.picker.onchange=()=>{this.localFile=this.picker.files?.[0]||null;};
+    this.feedback=this.contentEl.createDiv({cls:'pb-import-feedback',attr:{role:'status','aria-live':'polite','aria-atomic':'true'}});
+    this.feedback.hidden=true;
+    const footer=this.contentEl.createDiv({cls:'pb-import-footer'});
+    this.cancel=footer.createEl('button',{text:'取消'});this.cancel.onclick=()=>this.close();
+    this.submit=footer.createEl('button',{text:'导入论文',cls:'mod-cta'});
+    this.submit.onclick=()=>this.run();
+    this.submit.disabled=!this.source.value.trim();
+    this.source.oninput=()=>{this.source.removeAttribute('aria-invalid');if(!this.busy)this.submit.disabled=!this.source.value.trim();};
+    this.source.onkeydown=event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();this.run();}};
     this.source.focus();
+  }
+  setStatus(text,state='progress') {
+    this.feedback.hidden=false;this.feedback.textContent=text;
+    this.feedback.setAttr('data-state',state);
+    this.feedback.setAttr('role',state==='error'?'alert':'status');
+  }
+  setBusy(busy) {
+    this.busy=busy;this.contentEl.setAttr('aria-busy',String(busy));
+    for(const control of [this.source,this.doi,this.pdfUrl,this.depth,this.picker,this.cancel])control.disabled=busy;
+    this.submit.disabled=busy||!this.source.value.trim();
+    this.submit.textContent=busy?'正在导入…':'导入论文';
   }
   async run() {
     if (this.busy) return;
-    this.busy = true;this.submit.disabled = true;
+    this.setBusy(true);let sourceValid=false;
     try {
-      const source = core.parseInput(this.source.value);
+      const source = core.parseInput(this.source.value);sourceValid=true;
       if (this.doi.value.trim()) core.parseInput(this.doi.value);
-      this.feedback.textContent = '正在获取论文信息…';
+      this.setStatus('正在获取论文信息…');
       let existing = this.plugin.findExisting(source);
       if (existing) { await this.plugin.open(existing);new Notice('这篇论文已存在，已打开原笔记。');this.close();return; }
       const meta = await core.fetchMetadata(source, request, parseDocument, this.doi.value.trim());
       meta.readingDepth=this.depth.value;
       existing = this.plugin.findExisting(source, meta);
       if (existing) { await this.plugin.open(existing);new Notice('已找到同一篇论文，未覆盖你的笔记。');this.close();return; }
-      this.feedback.textContent = '已获取《' + meta.title + '》，正在获取 PDF…';
+      this.setStatus('已获取《' + meta.title + '》，正在获取 PDF…');
       let pdf = null, pdfData = null;
       if (this.localFile) {
         if (this.localFile.size > 80 * 1024 * 1024) throw new Error('本地 PDF 超过 80 MB，请手动放入论文文件夹。');
@@ -71,16 +108,16 @@ class ImportModal extends Modal {
       }
       const result = await this.plugin.savePaper(source, meta, pdf, pdfData);
       if(this.plugin.settings.translationEnabled){
-        this.feedback.textContent='正在翻译摘要（仅发送至设置中的翻译服务）…';
+        this.setStatus('正在翻译摘要（仅发送至设置中的翻译服务）…');
         await this.plugin.translateAbstract(result.note,meta.abstract).catch(err=>new Notice('中文摘要待补充：'+err.message,9000));
       }
-      this.feedback.textContent='正在查找论文方法主图…';
+      this.setStatus('正在查找论文方法主图…');
       const figureResult=await this.plugin.addMainFigure(result.note,meta,false).catch(()=>false);
       await this.plugin.open(result.note);this.close();
       if(!figureResult)new Notice('笔记已导入，主图尚未自动确定。可运行“为当前论文拉取／选择方法主图”。',8000);
       new Notice(result.pdfSaved ? '论文已导入，PDF 已保存；标签留空。' : '论文笔记已创建，PDF 待补充。可登录出版社下载后补入本地文件。', 8000);
-    } catch (err) { this.feedback.textContent = '导入未完成：' + err.message; }
-    finally { this.busy = false;this.submit.disabled = false; }
+    } catch (err) { this.setStatus('导入未完成：'+err.message,'error');if(!sourceValid){this.source.setAttr('aria-invalid','true');this.source.focus();} }
+    finally { this.setBusy(false); }
   }
 }
 module.exports = class PaperBridge extends Plugin {
@@ -296,22 +333,43 @@ module.exports = class PaperBridge extends Plugin {
 class PaperBridgeSettings extends PluginSettingTab {
   constructor(app,plugin){super(app,plugin);this.plugin=plugin;}
   display(){
-    const {containerEl}=this;containerEl.empty();
+    const {containerEl}=this;containerEl.empty();containerEl.addClass('pb-settings');
     containerEl.createEl('h2',{text:'Paper Bridge'});
+    containerEl.createEl('p',{text:'设置论文的保存方式，以及可选的中文摘要翻译。',cls:'pb-description'});
     const settings=this.plugin.settings;
     const save=()=>this.plugin.saveData(settings);
-    new Setting(containerEl).setName('论文保存目录').setDesc('相对于仓库根目录，例如：论文笔记。').addText(text=>text.setValue(settings.papersFolder).onChange(async value=>{
-      try{settings.papersFolder=core.paperFolder(value);await save();}catch{new Notice('请输入有效的仓库内相对目录。');}
-    }));
-    new Setting(containerEl).setName('默认阅读深度').addDropdown(select=>select.addOptions({'粗读':'粗读','精读':'精读'}).setValue(settings.defaultDepth).onChange(async value=>{settings.defaultDepth=value;await save();}));
-    new Setting(containerEl).setName('自动翻译摘要').setDesc('导入时仅将原文摘要发送给下方配置的服务。可能产生 API 费用；原文始终保留。').addToggle(toggle=>toggle.setValue(settings.translationEnabled).onChange(async value=>{settings.translationEnabled=value;await save();}));
-    new Setting(containerEl).setName('翻译服务 Base URL').setDesc('OpenAI 兼容接口的根地址，一般以 /v1 结尾。生产服务需使用 HTTPS。').addText(text=>text.setPlaceholder('https://api.example.com/v1').setValue(settings.translationBaseUrl).onChange(async value=>{settings.translationBaseUrl=value.trim();await save();}));
-    new Setting(containerEl).setName('翻译模型').setDesc('填写服务商提供的准确模型名称。').addText(text=>text.setValue(settings.translationModel).onChange(async value=>{settings.translationModel=value.trim();await save();}));
+    containerEl.createEl('h3',{text:'导入设置',cls:'pb-section-title'});
+    const imports=containerEl.createDiv({cls:'pb-settings-section'});
+    const folderSetting=new Setting(imports).setName('论文保存目录').setDesc('仓库内的相对路径，每篇论文建立“年份-题目”子目录。');
+    const folderError=imports.createEl('p',{cls:'pb-inline-error',attr:{id:'pb-folder-error',role:'status','aria-live':'polite'}});folderError.hidden=true;
+    folderSetting.addText(text=>{
+      text.inputEl.setAttribute('aria-describedby','pb-folder-error');
+      text.setValue(settings.papersFolder).onChange(async value=>{
+        try{const folder=core.paperFolder(value);settings.papersFolder=folder;folderError.hidden=true;text.inputEl.removeAttribute('aria-invalid');await save();}
+        catch{folderError.textContent='请输入仓库内的相对路径，例如 Research/Papers，不要包含 ..。';folderError.hidden=false;text.inputEl.setAttribute('aria-invalid','true');}
+      });
+    });
+    new Setting(imports).setName('默认阅读深度').setDesc('仅影响新导入的笔记，导入时仍可单独选择。').addDropdown(select=>select.addOptions({'粗读':'粗读','精读':'精读'}).setValue(settings.defaultDepth).onChange(async value=>{settings.defaultDepth=value;await save();}));
+    containerEl.createEl('h3',{text:'摘要翻译',cls:'pb-section-title'});
+    const translation=containerEl.createDiv({cls:'pb-settings-section'});
+    let providerFields,translationHint;
+    const updateTranslationState=()=>{
+      providerFields.hidden=!settings.translationEnabled;
+      translationHint.textContent=settings.translationEnabled?'导入时仅将原文摘要发送至下方服务，可能产生 API 费用。原文始终保留。':'已关闭。导入论文不会向模型服务发送摘要。';
+    };
+    new Setting(translation).setName('自动翻译摘要').setDesc('使用你自己的 OpenAI 兼容接口生成中文译文。').addToggle(toggle=>toggle.setValue(settings.translationEnabled).onChange(async value=>{settings.translationEnabled=value;updateTranslationState();await save();}));
+    translationHint=translation.createEl('p',{cls:'pb-translation-hint',attr:{role:'status','aria-live':'polite'}});
+    providerFields=translation.createDiv({cls:'pb-provider-fields'});
+    new Setting(providerFields).setName('翻译服务 Base URL').setDesc('填写 API 根地址，一般以 /v1 结尾，不含 /chat/completions。').addText(text=>text.setPlaceholder('https://api.example.com/v1').setValue(settings.translationBaseUrl).onChange(async value=>{settings.translationBaseUrl=value.trim();await save();}));
+    new Setting(providerFields).setName('翻译模型').setDesc('使用服务商提供的准确模型名称。').addText(text=>text.setPlaceholder('模型名称').setValue(settings.translationModel).onChange(async value=>{settings.translationModel=value.trim();await save();}));
     let draft='',keyInput;
-    new Setting(containerEl).setName('API Key').setDesc('仅保存在本设备 Obsidian 钥匙串，不写入插件 data.json；留空保留已有密钥。').addText(text=>{keyInput=text;text.inputEl.type='password';text.setPlaceholder('输入后点击保存密钥').onChange(value=>{draft=value;});}).addButton(button=>button.setButtonText('保存密钥').onClick(()=>{
+    const keyStatus=providerFields.createEl('p',{cls:'pb-field-help',attr:{role:'status','aria-live':'polite'}});
+    keyStatus.textContent='密钥只保存在本设备 Obsidian 钥匙串，不写入配置文件。';
+    new Setting(providerFields).setName('API Key').setDesc('输入新密钥后点击保存；留空保留已有密钥。').addText(text=>{keyInput=text;text.inputEl.type='password';text.inputEl.autocomplete='off';text.setPlaceholder('输入 API Key').onChange(value=>{draft=value;});}).addButton(button=>button.setButtonText('保存密钥').onClick(()=>{
       if(!draft.trim()){new Notice('请输入 API Key。');return;}
       if(!this.app.secretStorage){new Notice('当前 Obsidian 不支持钥匙串，请升级应用。');return;}
-      try{this.app.secretStorage.setSecret(SECRET_NAME,draft.trim());draft='';keyInput.setValue('');new Notice('密钥已保存至本设备钥匙串。');}catch{new Notice('钥匙串保存失败，未写入配置文件。');}
+      try{this.app.secretStorage.setSecret(SECRET_NAME,draft.trim());draft='';keyInput.setValue('');keyStatus.textContent='密钥已保存至本设备钥匙串。';new Notice('密钥已保存至本设备钥匙串。');}catch{new Notice('钥匙串保存失败，未写入配置文件。');}
     }));
+    updateTranslationState();
   }
 }
