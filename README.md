@@ -1,27 +1,22 @@
 # Paper Bridge
 
-将论文链接连接到 Obsidian 阅读笔记。适用于桌面版 Obsidian 1.15.0 及以上。
+在 Obsidian 里粘贴 arXiv 链接、IEEE Xplore 链接或 DOI，即可创建一篇带有论文信息和原文摘要（如来源提供）的阅读笔记。插件会尝试把可访问的 PDF 和方法主图一起存进论文文件夹。基础导入无需 API Key。
 
-[源码仓库](https://github.com/BIT-Penry/Paper-Bridge) · [问题反馈](https://github.com/BIT-Penry/Paper-Bridge/issues)
+**[下载插件 ZIP](https://github.com/BIT-Penry/Paper-Bridge/releases/latest/download/paper-bridge.zip)** · [版本说明](https://github.com/BIT-Penry/Paper-Bridge/releases/latest) · [问题反馈](https://github.com/BIT-Penry/Paper-Bridge/issues)
 
-支持 arXiv、IEEE Xplore 和 DOI；自动获取元数据、尝试下载可访问的 PDF、使用内置或自定义模板建立阅读笔记，并尝试提取方法主图。中文摘要翻译可选，默认关闭。
+## 安装
 
-## 安装插件
+适用于 **Obsidian 桌面版 1.15.0 及以上**，安装包已构建好。
 
-1. 打开 [GitHub Releases](https://github.com/BIT-Penry/Paper-Bridge/releases/latest)，在 Assets 中下载 `paper-bridge.zip`。
-2. 解压，将整个 `paper-bridge` 文件夹放进目标仓库的 `.obsidian/plugins/`。确认插件清单位于 `.obsidian/plugins/paper-bridge/manifest.json`。
-3. 重新打开 Obsidian，在「设置 → 第三方插件」启用 Paper Bridge。
-4. 点击侧边栏的下载按钮，粘贴论文链接即可导入。需要中文摘要时，再到插件设置里配置翻译服务。
+1. 下载上方的 `paper-bridge.zip` 并解压。
+2. 把解压得到的整个 `paper-bridge` 文件夹放进**要使用插件的 Obsidian 仓库**的 `.obsidian/plugins/` 下。在 macOS 的 Finder 中可按 `⌘ + Shift + .` 显示隐藏的 `.obsidian` 文件夹。
+3. 重新打开 Obsidian，在「设置 → 第三方插件」启用 **Paper Bridge**。如果列表里找不到它，检查文件路径是否为 `.obsidian/plugins/paper-bridge/manifest.json`。
 
-原个人仓库中的“论文导入”插件仍独立保留，本项目不会自动替换它。
+## 导入第一篇论文
 
-## 使用
-
-通过命令面板的“导入论文：arXiv／IEEE／DOI”，或侧边栏下载按钮导入。
-
-粘贴来源后选择粗读、精读或自己的阅读模板，按回车或点击“导入论文”。窗口会显示保存目录、翻译开关状态及当前导入阶段；失败时保留输入以便纠正。补充 DOI、公开 PDF 直链和本地 PDF 放在默认折叠的“补充来源与本地 PDF”中，按需展开。空输入无法提交，导入中会阻止重复提交。
-
-界面跟随 Obsidian 当前主题。“AI 服务”始终可见，以八种供应商卡片展示，连接配置采用两列布局。可切换已保存配置，也可新增和命名自定义供应商。
+1. 点击左侧工具栏的下载图标，或打开命令面板，搜索「导入论文」。
+2. 粘贴论文链接或 DOI，例如 `10.1109/LRA.2025.3546069`。第一次可以直接使用默认的「粗读」模板，按回车导入。
+3. 打开生成的笔记。摘要在前，阅读提纲在后。插件按「年份-题目」建立文件夹，取得的 PDF 和主图与笔记放在一起。
 
 ```text
 论文笔记/
@@ -51,20 +46,17 @@
 
 修改模板只影响之后新导入的论文。「移除」只取消登记，原模板与已有论文笔记都保留。如果移动或重命名模板文件，请重新添加新路径并移除旧路径。
 
-## 摘要翻译
+## 可选：自动翻译中文摘要
 
-在“AI 服务”点击供应商卡片，填写服务名称、Base URL、模型和 API Key，点击“验证并启用”。插件保存密钥并用示例短句验证翻译，成功后开启摘要自动翻译。每个供应商分别保存配置和密钥。开启后，每次新导入且取得原文摘要时自动生成中文译文，无需逐篇输入提示词。
+在「设置 → Paper Bridge → AI 服务」配置一次，以后导入带原文摘要的论文时，就会在笔记顶部看到中文译文和原文对照。翻译默认关闭。
 
-插件内置摘要翻译提示词：忠实翻译为简体中文，保留术语、数值、公式和限定条件，不添加总结或推断，仅输出译文。摘要视为待译资料，其中的指令不会作为系统指令。当前不提供自定义提示词编辑器。
+1. 选择 DeepSeek、Kimi、Qwen、MiniMax、GLM、Xiaomi MiMo、火山引擎，或选择「自定义」接入自己的 OpenAI 兼容服务。
+2. 确认 Base URL、填写 API Key，点击「获取模型」后从下拉列表选择，也可以手动填写模型名。Base URL 填接口根地址，例如 `https://api.example.com/v1`。MiMo 和火山引擎请填写自己账号可用的模型。
+3. 点击「验证并启用」。插件用一句示例文本测试翻译，成功后自动打开摘要翻译。已有论文可以在命令面板选择「为当前论文补充中文摘要」。
 
-没有原文摘要时会保留待补充提示，不能凭空生成译文；已有中文摘要不会自动覆盖。服务异常也不会阻止笔记创建。
+插件内置翻译提示词，要求保留原文中的术语、数值、公式和限定条件。译文会标明机器翻译，已有译文会保留。翻译失败时仍会创建阅读笔记。
 
-- Base URL 示例：`https://api.example.com/v1`；不要填写完整的 `/chat/completions` 地址。
-- 导入时将摘要发送到指定服务。获取模型会请求该服务的模型列表，验证连接会发送一句示例文本。
-- API Key 保存到本设备的 Obsidian 钥匙串，不写入 `data.json`、源码或日志；不同设备需分别配置。
-- 不绑定特定服务商，不读取其他插件的配置或密钥。远程服务必须使用 HTTPS，本机服务可用 HTTP。
-- 翻译可能产生费用。译文标注机器翻译，原文和来源保留。失败不会阻止论文笔记创建。
-- 已有论文可执行“为当前论文补充中文摘要”；已有非空译文不会覆盖。
+API Key 保存在本设备的 Obsidian 钥匙串中，换设备需重新配置。获取模型时会向该服务请求模型列表；启用翻译后，会将原文摘要发送给所选供应商，可能产生 API 费用。远程接口须使用 HTTPS，本机接口支持 HTTP。
 
 ## PDF 与主图
 
@@ -96,8 +88,4 @@ npm test
 
 MIT License。论文 PDF、图片及摘要的权利归各自权利人，不包含在本仓库中。
 
-供应商在设置页直接点击卡片选择。提供自定义、DeepSeek、Kimi、Qwen、MiniMax、GLM、Xiaomi MiMo 和火山引擎。模型与地址可编辑，MiMo 和火山引擎的模型需按账号填写。删除供应商会清除其本机密钥。
-
 供应商图标来自 [Lobe Icons](https://github.com/lobehub/lobe-icons)，MIT 许可。
-
-AI 服务在设置页直接以八种供应商卡片展示。连接配置分两列，支持获取模型列表，也可手动填写。“验证并启用”会保存输入的密钥并发送示例翻译请求，成功后开启摘要自动翻译。
