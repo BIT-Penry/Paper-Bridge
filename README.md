@@ -1,20 +1,17 @@
 # Paper Bridge
 
-将论文链接连接到 Obsidian 阅读笔记。当前为 **0.1.0 开发预览版**，尚未发布正式 Release 或进入 Obsidian 社区目录。
+将论文链接连接到 Obsidian 阅读笔记。适用于桌面版 Obsidian 1.15.0 及以上。
 
 [源码仓库](https://github.com/BIT-Penry/Paper-Bridge) · [问题反馈](https://github.com/BIT-Penry/Paper-Bridge/issues)
 
 支持 arXiv、IEEE Xplore 和 DOI；自动获取元数据、尝试下载可访问的 PDF、使用内置或自定义模板建立阅读笔记，并尝试提取方法主图。中文摘要翻译可选，默认关闭。
 
-## 安装开发版
+## 安装插件
 
-需要桌面版 Obsidian 1.15.0 或以上。先在一个测试仓库中使用。
-
-1. 在该项目目录执行 `npm run build`。
-2. 在测试仓库中创建 `.obsidian/plugins/paper-bridge/`。
-3. 将项目根目录的 `main.js`、`manifest.json`、`styles.css` 复制进去。
-4. 重启 Obsidian，在第三方插件中启用 Paper Bridge。
-5. 在插件设置中选择论文保存目录、默认阅读模板。无需 Copilot、Dataview 或现有工作台。
+1. 打开 [GitHub Releases](https://github.com/BIT-Penry/Paper-Bridge/releases/latest)，在 Assets 中下载 `paper-bridge.zip`。
+2. 解压，将整个 `paper-bridge` 文件夹放进目标仓库的 `.obsidian/plugins/`。确认插件清单位于 `.obsidian/plugins/paper-bridge/manifest.json`。
+3. 重新打开 Obsidian，在「设置 → 第三方插件」启用 Paper Bridge。
+4. 点击侧边栏的下载按钮，粘贴论文链接即可导入。需要中文摘要时，再到插件设置里配置翻译服务。
 
 原个人仓库中的“论文导入”插件仍独立保留，本项目不会自动替换它。
 

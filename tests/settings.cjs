@@ -11,12 +11,12 @@ class Modal {
 let stored={papersFolder:'Research/Papers',translationBaseUrl:'https://school.example/v1',unexpectedPrivateField:'do-not-persist'},persisted;
 const secrets=new Map();
 class Control {
-  constructor(){this.inputEl=new Element('input');}
+  constructor(){this.inputEl=new Element('input');this.selectEl=new Element('select');}
   setValue(value){this.value=value;return this;}
   setPlaceholder(){return this;}
   setDisabled(value){this.disabled=value;return this;}
   setButtonText(){return this;}
-  addOptions(){return this;}
+  addOptions(options){this.options={...this.options,...options};return this;}
   onChange(callback){this.change=callback;return this;}
   onClick(callback){this.click=callback;return this;}
 }
@@ -60,6 +60,18 @@ const PaperBridge=require('../main');Module._load=oldLoad;
   assert.equal(secrets.get('paper-bridge-api-key'),'fake-test-key');assert.equal(keyRow.controls[0].value,'');assert(!JSON.stringify(persisted).includes('fake-test-key'));
   assert.equal(plugin.settings.translationEnabled,true);
   assert.deepEqual(await plugin.fetchModels(plugin.currentProvider()),['a-model','z-model']);
+  await row('模型').controls[2].click();
+  const models=row('模型').controls[1];
+  assert.equal(models.selectEl.hidden,false);
+  assert.deepEqual(Object.keys(models.options).sort(),['__paper_bridge_manual__','a-model','example-model','z-model']);
+  assert.equal(row('模型').controls[0].inputEl.hidden,true);
+  await models.change('__paper_bridge_manual__');
+  assert.equal(row('模型').controls[0].inputEl.hidden,false);
+  await models.change('z-model');
+  assert.equal(row('模型').controls[0].inputEl.hidden,true);
+  assert.equal(plugin.currentProvider().model,'z-model');
+  assert.equal(row('模型').controls[0].value,'z-model');
+  await row('模型').controls[0].change('example-model');
   await plugin.addProvider({id:'deepseek',name:'DeepSeek',baseUrl:'https://api.deepseek.com',model:'deepseek-flash'});
   plugin.tab.display();
   await assert.rejects(()=>plugin.requestTranslation('sample',plugin.currentProvider()),/API Key/);

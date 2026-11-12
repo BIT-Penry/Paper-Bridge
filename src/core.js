@@ -156,15 +156,19 @@ async function openPdfCandidates(meta, request, parseDocument) {
   }
   return candidates.filter((c, i, arr) => c.url && arr.findIndex(x => x.url === c.url) === i);
 }
-function figureScore(caption, url) {
+function figureScore(caption, url, paperTitle = '') {
   const text = (caption + ' ' + url).toLowerCase();
   let score = 0;
   for (const [pattern, weight] of [[/\bframework\b/,3],[/\boverview\b/,4],[/\barchitecture\b/,4],[/\bpipeline\b/,3],[/\bproposed\b/,1],[/network (?:structure|design)/,2],[/system[_-]overview/,3]]) if(pattern.test(text))score+=weight;
   if(/\bschematic overview\b/.test(caption.toLowerCase()))score+=3;
   if (/\b(?:ablation|comparison|benchmark|performance|trajectories|results)\b/.test(caption.toLowerCase()))score-=3;
+  // A named overview is stronger evidence than incidental words later in its caption.
+  const method = /^([^:：]{2,60})[:：]/.exec(paperTitle)?.[1].trim().toLowerCase();
+  const subject = /^(?:(?:fig(?:ure)?\.?\s*[\d.]+\s*[:.\u2013-]?\s*))?(?:an?\s+)?(?:schematic\s+)?overview of\s+([^.!?]+)/i.exec(caption.trim())?.[1].trim().toLowerCase();
+  if (method && subject === method) score += 6;
   return score;
 }
-function parseFigureCandidates(html, pageUrl, parseDocument) {
+function parseFigureCandidates(html, pageUrl, parseDocument, paperTitle = '') {
   const doc = parseDocument(html, 'text/html');
   const candidates=[];
   for(const figure of Array.from(doc.querySelectorAll('figure'))){
@@ -177,7 +181,7 @@ function parseFigureCandidates(html, pageUrl, parseDocument) {
     }).filter(Boolean);
     if(images.length!==1)continue;
     const number=/^(?:Fig\.?|Figure)\s*([\d.]+)/i.exec(caption)?.[1]||'';
-    candidates.push({url:images[0],caption,number,pageUrl,anchor:figure.getAttribute('id')||'',score:figureScore(caption,images[0])});
+    candidates.push({url:images[0],caption,number,pageUrl,anchor:figure.getAttribute('id')||'',score:figureScore(caption,images[0],paperTitle)});
   }
   return candidates.sort((a,b)=>b.score-a.score);
 }
@@ -190,7 +194,7 @@ async function fetchFigures(meta, request, parseDocument) {
   const sources=meta.arxiv?['https://arxiv.org/html/'+meta.arxiv]:[meta.url];
   for(const source of sources){
     if(!source)continue;
-    try{const response=await request(source);const candidates=parseFigureCandidates(response.text,source,parseDocument);if(candidates.length)return candidates;}catch{}
+    try{const response=await request(source);const candidates=parseFigureCandidates(response.text,source,parseDocument,meta.title);if(candidates.length)return candidates;}catch{}
   }
   return [];
 }

@@ -569,17 +569,40 @@ class PaperBridgeSettings extends PluginSettingTab {
       invalidate();
       await save();
     }));
-    let modelInput;
+    let modelInput,modelSelect;
+    this.modelLists ||= new Map();
+    const modelCacheKey=provider.id+' '+provider.baseUrl;
+    const cachedModels=this.modelLists.get(modelCacheKey)||[];
+    const modelChoices=models=>Object.fromEntries([...new Set([provider.model,...models].filter(Boolean))].map(model=>[model,model]));
+    const manualModel='__paper_bridge_manual__';
     const modelSetting=new Setting(form).setName('模型').addText(text=>{
       modelInput=text;
-      text.inputEl.setAttribute('list','pb-model-options');
+      text.inputEl.hidden=!!provider.model;
       text.setPlaceholder('填写或获取模型').setValue(provider.model).onChange(async value=>{
         provider.model=value.trim();
         invalidate();
         await save();
       });
     });
-    const modelOptions=form.createEl('datalist',{attr:{id:'pb-model-options'}});
+    modelSetting.addDropdown(select=>{
+      modelSelect=select;
+      select.selectEl.addClass('pb-model-list');
+      select.selectEl.setAttribute('aria-label','全部可用模型');
+      select.addOptions({...modelChoices(cachedModels),[manualModel]:'手动输入模型…'});
+      select.setValue(provider.model||manualModel);
+      select.onChange(async value=>{
+        if(value===manualModel){
+          modelInput.inputEl.hidden=false;
+          modelInput.inputEl.focus();
+          return;
+        }
+        modelInput.inputEl.hidden=true;
+        provider.model=value;
+        modelInput.setValue(value);
+        invalidate();
+        await save();
+      });
+    });
     const saveKey=async()=>{
       if(!draft.trim())return;
       core.translationEndpoint(provider.baseUrl);
@@ -598,10 +621,13 @@ class PaperBridgeSettings extends PluginSettingTab {
         await saveKey();
         const models=await this.plugin.fetchModels({...provider});
         if(current!==revision)return;
-        modelOptions.empty();
-        for(const model of models)modelOptions.createEl('option',{attr:{value:model}});
+        this.modelLists.set(modelCacheKey,models);
         if(!provider.model&&models.length){provider.model=models[0];modelInput.setValue(provider.model);await save();}
-        result.textContent='已读取 '+models.length+' 个可用模型，可在模型输入框选择';
+        modelSelect.selectEl.empty();
+        modelSelect.addOptions({...modelChoices(models),[manualModel]:'手动输入模型…'});
+        modelSelect.setValue(provider.model||manualModel);
+        modelInput.inputEl.hidden=!!provider.model;
+        result.textContent='已读取 '+models.length+' 个可用模型，展开下拉框查看全部；也可手动填写';
       }catch(err){if(current===revision)result.textContent='获取失败 · '+err.message;}
       finally{button.setDisabled(false);}
     }));

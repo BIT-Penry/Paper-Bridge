@@ -25,3 +25,20 @@ global.DOMParser=class{parseFromString(){return{querySelectorAll:()=>[{
   const before=text;assert(await plugin.addMainFigure(note,meta,false));assert.equal(text,before);assert.equal(requests,2);
   console.log('PASS: new import with empty metadata cache saves figure directly in paper/images, sets cover and avoids duplicate insertion.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+const flowFigures = [
+  ['2608.00635v2/teaser.png', 'Fig. 1: Overview of FlowPilot. The model outputs reference trajectories.'],
+  ['2608.00635v2/mot_architecture.png', 'Fig. 2: Dual-stream MoT architecture.']
+];
+const parseFlow = () => ({querySelectorAll: () => flowFigures.map(([src, caption]) => ({
+  querySelector: () => ({textContent: caption}),
+  querySelectorAll: () => [{getAttribute: () => src}],
+  getAttribute: () => ''
+}))});
+(async () => {
+  const meta = {title:'FlowPilot: Real-Time World-Action Modeling for Agile UAV Navigation', arxiv:'2608.00635'};
+  const candidates = await core.fetchFigures(meta, async () => ({text:''}), parseFlow);
+  assert.equal(core.automaticFigure(candidates)?.number, '1');
+  assert.equal(core.automaticFigure(candidates)?.url, 'https://arxiv.org/html/2608.00635v2/teaser.png');
+  assert.equal(core.automaticFigure(core.parseFigureCandidates('', htmlUrl, parseFlow, 'Another: Study')), null);
+})().catch(error => {console.error(error); process.exitCode=1;});

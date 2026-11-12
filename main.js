@@ -159,15 +159,19 @@ async function openPdfCandidates(meta, request, parseDocument) {
   }
   return candidates.filter((c, i, arr) => c.url && arr.findIndex(x => x.url === c.url) === i);
 }
-function figureScore(caption, url) {
+function figureScore(caption, url, paperTitle = '') {
   const text = (caption + ' ' + url).toLowerCase();
   let score = 0;
   for (const [pattern, weight] of [[/\bframework\b/,3],[/\boverview\b/,4],[/\barchitecture\b/,4],[/\bpipeline\b/,3],[/\bproposed\b/,1],[/network (?:structure|design)/,2],[/system[_-]overview/,3]]) if(pattern.test(text))score+=weight;
   if(/\bschematic overview\b/.test(caption.toLowerCase()))score+=3;
   if (/\b(?:ablation|comparison|benchmark|performance|trajectories|results)\b/.test(caption.toLowerCase()))score-=3;
+  // A named overview is stronger evidence than incidental words later in its caption.
+  const method = /^([^:：]{2,60})[:：]/.exec(paperTitle)?.[1].trim().toLowerCase();
+  const subject = /^(?:(?:fig(?:ure)?\.?\s*[\d.]+\s*[:.\u2013-]?\s*))?(?:an?\s+)?(?:schematic\s+)?overview of\s+([^.!?]+)/i.exec(caption.trim())?.[1].trim().toLowerCase();
+  if (method && subject === method) score += 6;
   return score;
 }
-function parseFigureCandidates(html, pageUrl, parseDocument) {
+function parseFigureCandidates(html, pageUrl, parseDocument, paperTitle = '') {
   const doc = parseDocument(html, 'text/html');
   const candidates=[];
   for(const figure of Array.from(doc.querySelectorAll('figure'))){
@@ -180,7 +184,7 @@ function parseFigureCandidates(html, pageUrl, parseDocument) {
     }).filter(Boolean);
     if(images.length!==1)continue;
     const number=/^(?:Fig\.?|Figure)\s*([\d.]+)/i.exec(caption)?.[1]||'';
-    candidates.push({url:images[0],caption,number,pageUrl,anchor:figure.getAttribute('id')||'',score:figureScore(caption,images[0])});
+    candidates.push({url:images[0],caption,number,pageUrl,anchor:figure.getAttribute('id')||'',score:figureScore(caption,images[0],paperTitle)});
   }
   return candidates.sort((a,b)=>b.score-a.score);
 }
@@ -193,7 +197,7 @@ async function fetchFigures(meta, request, parseDocument) {
   const sources=meta.arxiv?['https://arxiv.org/html/'+meta.arxiv]:[meta.url];
   for(const source of sources){
     if(!source)continue;
-    try{const response=await request(source);const candidates=parseFigureCandidates(response.text,source,parseDocument);if(candidates.length)return candidates;}catch{}
+    try{const response=await request(source);const candidates=parseFigureCandidates(response.text,source,parseDocument,meta.title);if(candidates.length)return candidates;}catch{}
   }
   return [];
 }
@@ -840,17 +844,40 @@ class PaperBridgeSettings extends PluginSettingTab {
       invalidate();
       await save();
     }));
-    let modelInput;
+    let modelInput,modelSelect;
+    this.modelLists ||= new Map();
+    const modelCacheKey=provider.id+' '+provider.baseUrl;
+    const cachedModels=this.modelLists.get(modelCacheKey)||[];
+    const modelChoices=models=>Object.fromEntries([...new Set([provider.model,...models].filter(Boolean))].map(model=>[model,model]));
+    const manualModel='__paper_bridge_manual__';
     const modelSetting=new Setting(form).setName('模型').addText(text=>{
       modelInput=text;
-      text.inputEl.setAttribute('list','pb-model-options');
+      text.inputEl.hidden=!!provider.model;
       text.setPlaceholder('填写或获取模型').setValue(provider.model).onChange(async value=>{
         provider.model=value.trim();
         invalidate();
         await save();
       });
     });
-    const modelOptions=form.createEl('datalist',{attr:{id:'pb-model-options'}});
+    modelSetting.addDropdown(select=>{
+      modelSelect=select;
+      select.selectEl.addClass('pb-model-list');
+      select.selectEl.setAttribute('aria-label','全部可用模型');
+      select.addOptions({...modelChoices(cachedModels),[manualModel]:'手动输入模型…'});
+      select.setValue(provider.model||manualModel);
+      select.onChange(async value=>{
+        if(value===manualModel){
+          modelInput.inputEl.hidden=false;
+          modelInput.inputEl.focus();
+          return;
+        }
+        modelInput.inputEl.hidden=true;
+        provider.model=value;
+        modelInput.setValue(value);
+        invalidate();
+        await save();
+      });
+    });
     const saveKey=async()=>{
       if(!draft.trim())return;
       core.translationEndpoint(provider.baseUrl);
@@ -869,10 +896,13 @@ class PaperBridgeSettings extends PluginSettingTab {
         await saveKey();
         const models=await this.plugin.fetchModels({...provider});
         if(current!==revision)return;
-        modelOptions.empty();
-        for(const model of models)modelOptions.createEl('option',{attr:{value:model}});
+        this.modelLists.set(modelCacheKey,models);
         if(!provider.model&&models.length){provider.model=models[0];modelInput.setValue(provider.model);await save();}
-        result.textContent='已读取 '+models.length+' 个可用模型，可在模型输入框选择';
+        modelSelect.selectEl.empty();
+        modelSelect.addOptions({...modelChoices(models),[manualModel]:'手动输入模型…'});
+        modelSelect.setValue(provider.model||manualModel);
+        modelInput.inputEl.hidden=!!provider.model;
+        result.textContent='已读取 '+models.length+' 个可用模型，展开下拉框查看全部；也可手动填写';
       }catch(err){if(current===revision)result.textContent='获取失败 · '+err.message;}
       finally{button.setDisabled(false);}
     }));

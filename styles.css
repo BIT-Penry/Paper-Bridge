@@ -102,3 +102,9 @@ body img[src*="main-figure"], body .image-embed[src*="main-figure"] img {
 .pb-connection-actions .setting-item:first-child button { background:var(--interactive-accent); color:var(--text-on-accent); }
 .pb-ai-footnote { font-size:var(--font-ui-smaller); color:var(--text-muted); line-height:1.6; margin-top:16px; }
 @media(max-width:580px) { .pb-connection-form { grid-template-columns:1fr; } .pb-ai-header { align-items:flex-start; flex-wrap:wrap; } }
+
+.pb-connection-form .setting-item-control:has(.pb-model-list) { flex-wrap:wrap; }
+.pb-connection-form .pb-model-list { order:0; width:0; min-width:0; flex:1 1 0; min-height:44px; border:1px solid var(--background-modifier-border); border-radius:8px; background:var(--background-primary); padding:8px 12px; }
+.pb-connection-form .setting-item-control:has(.pb-model-list) input:not([hidden]) { order:2; flex-basis:100%; }
+.pb-connection-form .setting-item-control input[hidden] { display:none !important; }
+.pb-connection-form .pb-model-list[hidden] { display:none; }
