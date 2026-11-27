@@ -2,6 +2,10 @@
 
 Paper Bridge turns an arXiv link, an IEEE Xplore link, or a DOI into a reading note in Obsidian. It collects the paper's metadata and abstract and saves the PDF and main figure alongside the note when available. You can also connect your own model to translate abstracts into Chinese.
 
+![Paper Bridge import dialog with a paper link field and two reading templates](docs/images/import-paper.png)
+
+*Paste a paper link or DOI. Choose Quick Read (粗读) to capture the research question, contributions, and key equations, or Deep Read (精读) to work through the method, experiments, and reproduction details.*
+
 在 Obsidian 里粘贴 arXiv 链接、IEEE Xplore 链接或 DOI，即可创建一篇带有论文信息和原文摘要（如来源提供）的阅读笔记。插件会尝试把可访问的 PDF 和方法主图一起存进论文文件夹。基础导入无需 API Key。
 
 **[下载插件 ZIP](https://github.com/BIT-Penry/Paper-Bridge/releases/latest/download/paper-bridge.zip)** · [版本说明](https://github.com/BIT-Penry/Paper-Bridge/releases/latest) · [问题反馈](https://github.com/BIT-Penry/Paper-Bridge/issues)
