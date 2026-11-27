@@ -10,7 +10,7 @@ Module._load=function(name,...args){if(name==='obsidian')return{Plugin:class{},M
 }};return previousLoad.call(this,name,...args);};
 const PaperBridge=require('../main');Module._load=previousLoad;
 global.DOMParser=class{parseFromString(){return{querySelectorAll:()=>[{
-  querySelector:()=>({textContent:'Fig. 2: The proposed NavRL framework. Overview of the system.'}),
+  querySelector:()=>({querySelectorAll:()=>[],textContent:'Fig. 2: The proposed NavRL framework. Overview of the system.'}),
   querySelectorAll:()=>[{getAttribute:key=>key==='src'?'2409.15634v2/images/system_overview.png':null}],
   getAttribute:key=>key==='id'?'S3.F2':null
 }]};}};
@@ -31,7 +31,7 @@ const flowFigures = [
   ['2608.00635v2/mot_architecture.png', 'Fig. 2: Dual-stream MoT architecture.']
 ];
 const parseFlow = () => ({querySelectorAll: () => flowFigures.map(([src, caption]) => ({
-  querySelector: () => ({textContent: caption}),
+  querySelector: () => ({querySelectorAll:()=>[],textContent: caption}),
   querySelectorAll: () => [{getAttribute: () => src}],
   getAttribute: () => ''
 }))});
@@ -42,3 +42,23 @@ const parseFlow = () => ({querySelectorAll: () => flowFigures.map(([src, caption
   assert.equal(core.automaticFigure(candidates)?.url, 'https://arxiv.org/html/2608.00635v2/teaser.png');
   assert.equal(core.automaticFigure(core.parseFigureCandidates('', htmlUrl, parseFlow, 'Another: Study')), null);
 })().catch(error => {console.error(error); process.exitCode=1;});
+
+const overview = 'Fig. 2: System overview. A sequence of inputs.';
+const overviewScore = core.figureScore(overview,'fig2_overview.jpg');
+assert(core.automaticFigure([{score:overviewScore}, {score:1}]));
+assert.equal(core.automaticFigure([{score:overviewScore}, {score:overviewScore}]), null);
+const mathCaption = {
+  textContent: 'Fig. 2: System overview. State xx_{t}.',
+  querySelectorAll: () => [{
+    getAttribute: () => '',
+    querySelector: () => ({textContent:'x_{t}'}),
+    replaceWith: value => { mathCaption.textContent = mathCaption.textContent.replace('xx_{t}', () => value); }
+  }]
+};
+const mathDocument = () => ({querySelectorAll: () => [{
+  querySelector: () => mathCaption,
+  querySelectorAll: () => [{getAttribute: () => 'fig2.jpg'}],
+  getAttribute: () => 'F2'
+}]});
+const selected = core.automaticFigure(core.parseFigureCandidates('', htmlUrl, mathDocument));
+assert.equal(selected?.caption, 'Fig. 2: System overview. State $x_{t}$.');

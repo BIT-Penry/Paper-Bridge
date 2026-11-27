@@ -160,6 +160,7 @@ function figureScore(caption, url, paperTitle = '') {
   const text = (caption + ' ' + url).toLowerCase();
   let score = 0;
   for (const [pattern, weight] of [[/\bframework\b/,3],[/\boverview\b/,4],[/\barchitecture\b/,4],[/\bpipeline\b/,3],[/\bproposed\b/,1],[/network (?:structure|design)/,2],[/system[_-]overview/,3]]) if(pattern.test(text))score+=weight;
+  if (/^(?:fig(?:ure)?\.?\s*\d+\s*[:.\u2013-]?\s*)?(?:system overview|system architecture)\s*[.:]/i.test(caption.trim())) score += 4;
   if(/\bschematic overview\b/.test(caption.toLowerCase()))score+=3;
   if (/\b(?:ablation|comparison|benchmark|performance|trajectories|results)\b/.test(caption.toLowerCase()))score-=3;
   // A named overview is stronger evidence than incidental words later in its caption.
@@ -172,7 +173,15 @@ function parseFigureCandidates(html, pageUrl, parseDocument, paperTitle = '') {
   const doc = parseDocument(html, 'text/html');
   const candidates=[];
   for(const figure of Array.from(doc.querySelectorAll('figure'))){
-    const caption=compact(figure.querySelector('figcaption')?.textContent);
+    const captionEl=figure.querySelector('figcaption');
+    if(!captionEl)continue;
+    // arXiv MathML stores the displayed symbols and their TeX annotation together.
+    for(const math of captionEl.querySelectorAll('math')){
+      const tex=compact(math.getAttribute('alttext')) || compact(math.querySelector('annotation[encoding="application/x-tex" i]')?.textContent);
+      if(tex)math.replaceWith('$'+tex+'$');
+      else for(const annotation of math.querySelectorAll('annotation, annotation-xml'))annotation.remove();
+    }
+    const caption=compact(captionEl.textContent);
     if(!caption)continue;
     const images=Array.from(figure.querySelectorAll('img')).map(image=>{
       const src=image.getAttribute('src')||image.getAttribute('data-src');
