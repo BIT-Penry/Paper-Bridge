@@ -1,6 +1,6 @@
 {
   "name": "obsidian-paper-bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Import papers, PDFs, bilingual abstracts and reading notes into Obsidian.",
   "license": "MIT",
